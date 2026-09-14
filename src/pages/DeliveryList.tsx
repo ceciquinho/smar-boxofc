@@ -1,15 +1,15 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Plus, Search, Package } from "lucide-react";
 import { motion } from "framer-motion";
+import { Package, Plus, ScanLine, Search, ShieldCheck } from "lucide-react";
 import { fetchDeliveries } from "@/services/deliveryService";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
-import type { DeliveryStatus } from "@/types/delivery";
 import { CreateDeliveryDialog } from "@/components/CreateDeliveryDialog";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import type { DeliveryStatus } from "@/types/delivery";
 
 const tabs: { label: string; value: DeliveryStatus | "all" }[] = [
   { label: "Todos", value: "all" },
@@ -18,52 +18,98 @@ const tabs: { label: string; value: DeliveryStatus | "all" }[] = [
 ];
 
 export default function DeliveryList() {
-  const queryClient = useQueryClient();
+  const { role } = useAuth();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<DeliveryStatus | "all">("all");
   const [showCreate, setShowCreate] = useState(false);
+  const currentRole = role ?? "cliente";
+  const canCreateDelivery = currentRole === "cliente" || currentRole === "admin";
 
   const { data: deliveries = [], isLoading } = useQuery({
     queryKey: ["deliveries"],
     queryFn: fetchDeliveries,
   });
 
-  // Realtime: refetch whenever deliveries change in the DB
-  useEffect(() => {
-    const channel = supabase
-      .channel("deliveries-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "deliveries" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["deliveries"] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [queryClient]);
+  const deliveredCount = deliveries.filter((delivery) => delivery.status === "delivered").length;
+  const pendingCount = deliveries.filter((delivery) => delivery.status === "pending").length;
 
-  const filtered = deliveries.filter((d) => {
+  const pageCopy = {
+    cliente: {
+      title: "Minhas Entregas",
+      description: "Cadastre uma entrega e gere o QR Code que o entregador vai escanear na caixa.",
+      search: "Buscar por ID ou destinatario...",
+      empty: "Voce ainda nao tem entregas cadastradas",
+      create: "Nova entrega",
+    },
+    entregador: {
+      title: "Rota do Entregador",
+      description: "Veja as entregas pendentes e escaneie o QR Code no leitor da caixa.",
+      search: "Buscar pacote ou destinatario...",
+      empty: "Nenhuma entrega disponivel para a rota",
+      create: "",
+    },
+    admin: {
+      title: "Painel do Administrador",
+      description: "Monitore entregas, QR Codes do entregador e acessos da caixa.",
+      search: "Buscar por ID ou destinatario...",
+      empty: "Nenhuma entrega registrada",
+      create: "Nova entrega",
+    },
+  }[currentRole];
+
+  const filtered = deliveries.filter((delivery) => {
+    const normalizedSearch = search.toLowerCase();
     const matchesSearch =
-      d.order_id.toLowerCase().includes(search.toLowerCase()) ||
-      d.recipient_name.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === "all" || d.status === filter;
+      delivery.order_id.toLowerCase().includes(normalizedSearch) ||
+      delivery.recipient_name.toLowerCase().includes(normalizedSearch);
+    const matchesFilter = filter === "all" || delivery.status === filter;
     return matchesSearch && matchesFilter;
   });
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold">QR Codes de Entrega</h1>
-        <Button onClick={() => setShowCreate(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nova
-        </Button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-bold">{pageCopy.title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{pageCopy.description}</p>
+        </div>
+        {canCreateDelivery ? (
+          <Button onClick={() => setShowCreate(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {pageCopy.create}
+          </Button>
+        ) : (
+          <Button asChild className="gap-2">
+            <Link to="/scan">
+              <ScanLine className="h-4 w-4" />
+              Escanear QR
+            </Link>
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="glass-card p-4">
+          <p className="text-2xl font-bold text-foreground">{deliveries.length}</p>
+          <p className="text-xs text-muted-foreground">Total</p>
+        </div>
+        <div className="glass-card p-4">
+          <p className="text-2xl font-bold text-warning">{pendingCount}</p>
+          <p className="text-xs text-muted-foreground">Pendentes</p>
+        </div>
+        <div className="glass-card p-4">
+          <p className="text-2xl font-bold text-primary">{deliveredCount}</p>
+          <p className="text-xs text-muted-foreground">Entregues</p>
+        </div>
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Buscar por ID ou destinatário..."
+          placeholder={pageCopy.search}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 bg-card border-border"
+          onChange={(event) => setSearch(event.target.value)}
+          className="border-border bg-card pl-9"
         />
       </div>
 
@@ -96,8 +142,8 @@ export default function DeliveryList() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-          <Package className="h-12 w-12" />
-          <p className="text-sm">Nenhuma entrega encontrada</p>
+          {currentRole === "admin" ? <ShieldCheck className="h-12 w-12" /> : <Package className="h-12 w-12" />}
+          <p className="text-sm">{pageCopy.empty}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -113,9 +159,7 @@ export default function DeliveryList() {
                 className="glass-card block p-4 transition-all hover:border-primary/30 hover:glow-green"
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="font-heading text-sm font-semibold text-foreground">
-                    #{delivery.order_id}
-                  </span>
+                  <span className="font-heading text-sm font-semibold text-foreground">#{delivery.order_id}</span>
                   <StatusBadge status={delivery.status} />
                 </div>
                 <p className="text-sm text-muted-foreground">{delivery.recipient_name}</p>

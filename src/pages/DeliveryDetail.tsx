@@ -1,19 +1,22 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
-import { ArrowLeft, RefreshCw, Clock, Download } from "lucide-react";
+import { ArrowLeft, Clock, Download, QrCode, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { fetchDelivery, fetchActiveToken, generateToken } from "@/services/deliveryService";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function DeliveryDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { role } = useAuth();
   const [timeLeft, setTimeLeft] = useState<string>("");
+  const canManageQr = role === "cliente" || role === "admin";
 
   const { data: delivery, isLoading } = useQuery({
     queryKey: ["delivery", id],
@@ -33,14 +36,16 @@ export default function DeliveryDetail() {
     mutationFn: () => generateToken(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["token", id] });
-      toast.success("QR Code gerado com sucesso!");
+      toast.success("QR do entregador gerado com sucesso!");
     },
     onError: () => toast.error("Erro ao gerar QR Code"),
   });
 
-  // Countdown timer
   useEffect(() => {
-    if (!token) { setTimeLeft(""); return; }
+    if (!token) {
+      setTimeLeft("");
+      return;
+    }
     const interval = setInterval(() => {
       const remaining = new Date(token.expires_at).getTime() - Date.now();
       if (remaining <= 0) {
@@ -55,8 +60,15 @@ export default function DeliveryDetail() {
     return () => clearInterval(interval);
   }, [token, id, queryClient]);
 
-  if (isLoading) return <div className="flex items-center justify-center py-20"><RefreshCw className="h-6 w-6 animate-spin text-primary" /></div>;
-  if (!delivery) return <p className="py-20 text-center text-muted-foreground">Entrega não encontrada</p>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!delivery) return <p className="py-20 text-center text-muted-foreground">Entrega nao encontrada</p>;
 
   const handleDownloadQR = () => {
     const svg = document.getElementById("qr-code-svg");
@@ -70,7 +82,7 @@ export default function DeliveryDetail() {
     img.onload = () => {
       ctx?.drawImage(img, 0, 0, 512, 512);
       const a = document.createElement("a");
-      a.download = `qr-${delivery.order_id}.png`;
+      a.download = `qr-entregador-${delivery.order_id}.png`;
       a.href = canvas.toDataURL("image/png");
       a.click();
     };
@@ -80,16 +92,23 @@ export default function DeliveryDetail() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <button
+          onClick={() => navigate(-1)}
+          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h1 className="font-heading text-xl font-bold">Detalhes da Entrega</h1>
+        <div>
+          <h1 className="font-heading text-xl font-bold">Detalhes da Entrega</h1>
+          <p className="text-sm text-muted-foreground">
+            QR usado pelo entregador no scanner da caixa.
+          </p>
+        </div>
       </div>
 
-      {/* QR Code Section */}
       <div className="glass-card glow-green p-6">
         <p className="mb-4 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Código de Entrega Escaneável
+          QR do entregador para a caixa
         </p>
         {token && timeLeft !== "Expirado" ? (
           <div className="flex flex-col items-center gap-4">
@@ -111,45 +130,54 @@ export default function DeliveryDetail() {
               <Button variant="outline" size="sm" onClick={handleDownloadQR} className="gap-2">
                 <Download className="h-4 w-4" /> Download QR
               </Button>
-              <Button size="sm" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="gap-2">
-                <RefreshCw className={`h-4 w-4 ${generateMutation.isPending ? "animate-spin" : ""}`} />
-                Regenerar
-              </Button>
+              {canManageQr && (
+                <Button
+                  size="sm"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${generateMutation.isPending ? "animate-spin" : ""}`} />
+                  Regenerar
+                </Button>
+              )}
             </div>
+            <p className="max-w-sm text-center text-xs text-muted-foreground">
+              O entregador deve apresentar este QR no scanner fisico da caixa para abrir o compartimento.
+            </p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 py-8">
-            <p className="text-sm text-muted-foreground">Nenhum QR Code ativo</p>
-            <Button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="gap-2">
-              <QRCodeSVG value="placeholder" size={16} className="opacity-80" />
-              Gerar QR Code
-            </Button>
+            <p className="text-sm text-muted-foreground">Nenhum QR do entregador ativo</p>
+            {canManageQr ? (
+              <Button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="gap-2">
+                <QrCode className="h-4 w-4" />
+                Gerar QR para o entregador
+              </Button>
+            ) : (
+              <p className="max-w-sm text-center text-xs text-muted-foreground">
+                Solicite ao cliente ou administrador um QR ativo para esta entrega.
+              </p>
+            )}
           </div>
         )}
       </div>
 
-      {/* Delivery Info */}
       <div className="glass-card space-y-4 p-6">
         <h2 className="font-heading text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-          Informações da Entrega
+          Informacoes da entrega
         </h2>
-        <InfoRow label="ID da Entrega" value={delivery.order_id} />
-        <InfoRow label="Destinatário" value={delivery.recipient_name} />
+        <InfoRow label="ID da entrega" value={delivery.order_id} />
+        <InfoRow label="Destinatario" value={delivery.recipient_name} />
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Status</span>
           <StatusBadge status={delivery.status} />
         </div>
-        {delivery.recipient_address && <InfoRow label="Endereço" value={delivery.recipient_address} />}
+        {delivery.recipient_address && <InfoRow label="Endereco" value={delivery.recipient_address} />}
         {delivery.notes && <InfoRow label="Notas" value={delivery.notes} />}
-        <InfoRow
-          label="Criado em"
-          value={new Date(delivery.created_at).toLocaleString("pt-BR")}
-        />
+        <InfoRow label="Criado em" value={new Date(delivery.created_at).toLocaleString("pt-BR")} />
         {delivery.delivered_at && (
-          <InfoRow
-            label="Entregue em"
-            value={new Date(delivery.delivered_at).toLocaleString("pt-BR")}
-          />
+          <InfoRow label="Entregue em" value={new Date(delivery.delivered_at).toLocaleString("pt-BR")} />
         )}
       </div>
     </motion.div>
