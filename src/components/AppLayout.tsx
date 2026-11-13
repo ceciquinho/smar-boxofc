@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
-import { Package, QrCode, Shield, BarChart3, LogOut } from "lucide-react";
+import { Package, QrCode, Shield, BarChart3, LogOut, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +14,8 @@ const navItems = [
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -27,6 +30,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-xs text-muted-foreground sm:inline">{user?.email}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              aria-label={`Ativar tema ${isDark ? "claro" : "escuro"}`}
+              className="gap-1.5"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <span>Tema {isDark ? "claro" : "escuro"}</span>
+            </Button>
             <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5">
               <LogOut className="h-4 w-4" /> Sair
             </Button>

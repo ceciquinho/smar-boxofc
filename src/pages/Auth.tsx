@@ -1,18 +1,21 @@
 // Auth page — email/password + Google. Redirects authenticated users to home.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package } from "lucide-react";
+import { Moon, Package, Sun } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Auth() {
   const navigate = useNavigate();
   const { user, signInWithGoogle } = useAuth();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -48,7 +51,17 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setTheme(isDark ? "light" : "dark")}
+        aria-label={`Ativar tema ${isDark ? "claro" : "escuro"}`}
+        className="absolute right-4 top-4 gap-1.5"
+      >
+        {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        Tema {isDark ? "claro" : "escuro"}
+      </Button>
       <div className="glass-card w-full max-w-md p-6">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
