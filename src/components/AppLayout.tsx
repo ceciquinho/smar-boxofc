@@ -1,19 +1,38 @@
 import { Link, useLocation } from "react-router-dom";
-import { Package, QrCode, Shield, BarChart3, LogOut, Moon, Sun } from "lucide-react";
+import { Package, QrCode, Shield, BarChart3, LogOut, Moon, Sun, ScanLine } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, type UserInterfaceRole } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
-const navItems = [
-  { to: "/", icon: Package, label: "Entregas" },
-  { to: "/generate", icon: QrCode, label: "Gerar QR" },
-  { to: "/box", icon: Shield, label: "Caixa IoT" },
-  { to: "/logs", icon: BarChart3, label: "Logs" },
-];
+const roleLabels: Record<UserInterfaceRole, string> = {
+  cliente: "Cliente",
+  entregador: "Entregador",
+  admin: "Admin",
+};
+
+const navItemsByRole: Record<UserInterfaceRole, { to: string; icon: typeof Package; label: string }[]> = {
+  cliente: [
+    { to: "/", icon: Package, label: "Minhas Entregas" },
+    { to: "/generate", icon: QrCode, label: "Novo QR" },
+  ],
+  entregador: [
+    { to: "/", icon: Package, label: "Rota" },
+    { to: "/scan", icon: ScanLine, label: "Escanear" },
+    { to: "/box", icon: Shield, label: "Caixa" },
+  ],
+  admin: [
+    { to: "/", icon: Package, label: "Entregas" },
+    { to: "/generate", icon: QrCode, label: "Gerar QR" },
+    { to: "/box", icon: Shield, label: "Caixa IoT" },
+    { to: "/logs", icon: BarChart3, label: "Logs" },
+  ],
+};
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
+  const currentRole = role ?? "cliente";
+  const navItems = navItemsByRole[currentRole];
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -29,14 +48,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="font-heading text-lg font-bold tracking-tight">Smart Delivery Box</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-muted-foreground sm:inline">{user?.email}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setTheme(isDark ? "light" : "dark")}
-              aria-label={`Ativar tema ${isDark ? "claro" : "escuro"}`}
-              className="gap-1.5"
-            >
+            <div className="hidden text-right sm:block">
+              <span className="block text-xs text-muted-foreground">{user?.email}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+                {roleLabels[currentRole]}
+              </span>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setTheme(isDark ? "light" : "dark")} aria-label={`Ativar tema ${isDark ? "claro" : "escuro"}`} className="gap-1.5">
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               <span>Tema {isDark ? "claro" : "escuro"}</span>
             </Button>
@@ -54,7 +72,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <nav className="sticky bottom-0 border-t border-border/50 bg-background/80 backdrop-blur-xl">
         <div className="container flex items-center justify-around py-2">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.to;
+            const isActive = location.pathname === item.to || (item.to === "/" && location.pathname.startsWith("/delivery"));
             return (
               <Link
                 key={item.to}

@@ -1,53 +1,67 @@
-// Auth page — email/password + Google. Redirects authenticated users to home.
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Moon, Package, Sun } from "lucide-react";
 import { toast } from "sonner";
+import type { UserInterfaceRole } from "@/hooks/useAuth";
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { user, signInWithGoogle } = useAuth();
+  const { user, signIn, signUp } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [interfaceRole, setInterfaceRole] = useState<Exclude<UserInterfaceRole, "admin">>("cliente");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (user) navigate("/", { replace: true });
   }, [user, navigate]);
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) toast.error(error.message);
-    else navigate("/");
+    try {
+      await signIn(email, password);
+      navigate("/");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao entrar");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignUp = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: { display_name: name },
-      },
-    });
-    setLoading(false);
-    if (error) toast.error(error.message);
-    else toast.success("Conta criada! Verifique seu email para confirmar.");
+    try {
+      await signUp({
+        email,
+        password,
+        display_name: name,
+        role: interfaceRole,
+      });
+      toast.success("Conta criada com sucesso!");
+      navigate("/");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao criar conta");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -69,7 +83,7 @@ export default function Auth() {
           </div>
           <div>
             <h1 className="font-heading text-xl font-bold">Smart Delivery Box</h1>
-            <p className="text-xs text-muted-foreground">Entre na sua conta</p>
+            <p className="text-xs text-muted-foreground">Acesso pelo banco PHP/MySQL</p>
           </div>
         </div>
 
@@ -83,11 +97,16 @@ export default function Auth() {
             <form onSubmit={handleSignIn} className="space-y-3">
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Senha</Label>
-                <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                <Input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Entrando..." : "Entrar"}
@@ -99,15 +118,36 @@ export default function Auth() {
             <form onSubmit={handleSignUp} className="space-y-3">
               <div className="space-y-2">
                 <Label>Nome</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Input value={name} onChange={(event) => setName(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de acesso</Label>
+                <Select
+                  value={interfaceRole}
+                  onValueChange={(value: Exclude<UserInterfaceRole, "admin">) => setInterfaceRole(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de acesso" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cliente">Cliente</SelectItem>
+                    <SelectItem value="entregador">Entregador</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Senha (mín. 6 caracteres)</Label>
-                <Input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+                <Label>Senha (min. 6 caracteres)</Label>
+                <Input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Criando..." : "Criar conta"}
@@ -115,16 +155,6 @@ export default function Auth() {
             </form>
           </TabsContent>
         </Tabs>
-
-        <div className="my-4 flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">ou</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-
-        <Button variant="outline" className="w-full" onClick={() => signInWithGoogle().catch((e) => toast.error(e.message))}>
-          Continuar com Google
-        </Button>
       </div>
     </div>
   );

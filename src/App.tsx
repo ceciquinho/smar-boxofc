@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth, type UserInterfaceRole } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Auth from "@/pages/Auth";
 import DeliveryList from "@/pages/DeliveryList";
@@ -12,6 +12,7 @@ import DeliveryDetail from "@/pages/DeliveryDetail";
 import GenerateQR from "@/pages/GenerateQR";
 import BoxSimulator from "@/pages/BoxSimulator";
 import AccessLogs from "@/pages/AccessLogs";
+import ScanQR from "@/pages/ScanQR";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,9 +34,38 @@ const App = () => (
                     <Routes>
                       <Route path="/" element={<DeliveryList />} />
                       <Route path="/delivery/:id" element={<DeliveryDetail />} />
-                      <Route path="/generate" element={<GenerateQR />} />
-                      <Route path="/box" element={<BoxSimulator />} />
-                      <Route path="/logs" element={<AccessLogs />} />
+                      <Route
+                        path="/generate"
+                        element={
+                          <RoleRoute roles={["cliente", "admin"]}>
+                            <GenerateQR />
+                          </RoleRoute>
+                        }
+                      />
+                      <Route
+                        path="/scan"
+                        element={
+                          <RoleRoute roles={["entregador", "admin"]}>
+                            <ScanQR />
+                          </RoleRoute>
+                        }
+                      />
+                      <Route
+                        path="/box"
+                        element={
+                          <RoleRoute roles={["entregador", "admin"]}>
+                            <BoxSimulator />
+                          </RoleRoute>
+                        }
+                      />
+                      <Route
+                        path="/logs"
+                        element={
+                          <RoleRoute roles={["admin"]}>
+                            <AccessLogs />
+                          </RoleRoute>
+                        }
+                      />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>
@@ -51,3 +81,10 @@ const App = () => (
 );
 
 export default App;
+
+function RoleRoute({ roles, children }: { roles: UserInterfaceRole[]; children: React.ReactNode }) {
+  const { role, loading } = useAuth();
+  if (loading) return <div className="py-20 text-center text-muted-foreground">Carregando...</div>;
+  if (!role || !roles.includes(role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
